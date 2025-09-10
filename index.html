@@ -33,19 +33,16 @@
       .then(res => res.json())
       .then(data => {
         L.geoJSON(data, {
-  pointToLayer: function (feature, latlng) {
-    const color = feature.properties["marker-color"] || "#ff0000";
-    const divIcon = L.divIcon({
-      className: "custom-marker",
-      html: `<div style="background:${color}; width:16px; height:16px; border-radius:50%; border:2px solid white"></div>`,
-      iconSize: [16, 16]
-    });
-    return L.marker(latlng, { icon: divIcon }).bindPopup(`<b>${feature.properties.title}</b>`);
-  },
-  style: () => null // ❌ verhindert, dass Leaflet zusätzliche Symbole rendert
-}).addTo(map);
-
-        }).addTo(map);
+          pointToLayer: function (feature, latlng) {
+            const color = feature.properties["marker-color"] || "#ff0000";
+            const divIcon = L.divIcon({
+              className: "custom-marker",
+              html: `<div style="background:${color}; width:16px; height:16px; border-radius:50%; border:2px solid white"></div>`,
+              iconSize: [16, 16]
+            });
+            return L.marker(latlng, { icon: divIcon }).bindPopup(`<b>${feature.properties.title}</b>`);
+          }
+        }).addTo(map); // ✅ nur einmal hier
       });
   </script>
 </body>
