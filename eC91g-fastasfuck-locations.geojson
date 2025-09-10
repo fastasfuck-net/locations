@@ -16,7 +16,7 @@
         "locked":false,
         "tooltip":{"enabled":false,"text":""},
         "marker-size":1,
-        "marker-color":"#FFAA00",
+        "marker-color":"#ffff00",
         "description":"",
         "marker-symbol":"circle"
       },
