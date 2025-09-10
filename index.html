@@ -3,13 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <title>FastAsFuck - Global Network</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body { height: 100%; font-family: 'Inter', sans-serif; background: #0a0a0a; overflow: hidden; }
-    #map { width: 100%; height: 100%; position: relative; z-index: 1; }
-
+    
+    canvas { display: block; }
     /* Header Overlay */
     .header-overlay {
       position: absolute;
@@ -21,7 +20,6 @@
     }
     .header-content { display: flex; justify-content: space-between; align-items: center; max-width: 1200px; margin: 0 auto; }
     .header-title { color: #ffffff; font-size: 24px; font-weight: 600; letter-spacing: -0.02em; }
-
     /* Legend */
     .legend {
       position: absolute; bottom: 30px; left: 30px;
@@ -33,26 +31,21 @@
     .legend-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
     .legend-dot.active { background: #00ff88; animation: glow 2s ease-in-out infinite alternate; }
     .legend-dot.planned { background: #ffaa00; }
+    .legend-line { width: 20px; height: 3px; border-radius: 2px; background: #00ff88; }
     @keyframes glow { from { box-shadow: 0 2px 8px rgba(0,255,136,0.3); } to { box-shadow: 0 2px 20px rgba(0,255,136,0.6); } }
-
-    /* Marker Styles */
-    .custom-marker { border-radius: 50%; width: 20px; height: 20px; border: 3px solid white; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-    .custom-marker:hover { transform: scale(1.2); box-shadow: 0 6px 20px rgba(0,0,0,0.4); }
-    .custom-marker.active { animation: pulse-marker 2s infinite; }
-    @keyframes pulse-marker { 0%, 100% { transform: scale(1); box-shadow: 0 4px 12px rgba(0,255,136,0.3); } 50% { transform: scale(1.1); box-shadow: 0 6px 20px rgba(0,255,136,0.6); } }
-
-    /* Popup Styles */
-    .leaflet-popup-content-wrapper { background: rgba(0,0,0,0.9); backdrop-filter: blur(20px); border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
-    .leaflet-popup-content { color: #ffffff; font-family: 'Inter', sans-serif; margin: 16px 20px; font-size: 16px; font-weight: 500; text-align: center; }
-    .leaflet-popup-tip { background: rgba(0,0,0,0.9); border: 1px solid rgba(255,255,255,0.1); }
-    .popup-title { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
-    .popup-status { font-size: 14px; opacity: 0.8; }
-
+    /* Controls Info */
+    .controls-info {
+      position: absolute; bottom: 30px; right: 30px;
+      background: rgba(0,0,0,0.85); backdrop-filter: blur(20px); border-radius: 16px;
+      padding: 16px; z-index: 1000; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+      color: #cccccc; font-size: 12px; max-width: 200px;
+    }
     /* Responsive */
     @media (max-width: 768px) {
       .header-overlay { padding: 15px 20px; }
       .header-title { font-size: 20px; }
-      .legend { position: relative; margin: 10px; width: calc(100% - 20px); }
+      .legend, .controls-info { position: static; margin: 10px; width: calc(100% - 20px); }
+      .controls-info { max-width: none; }
     }
   </style>
 </head>
@@ -63,53 +56,418 @@
       <div class="header-title">FastAsFuck - Global Network</div>
     </div>
   </div>
-
-  <!-- Map -->
-  <div id="map"></div>
-
   <!-- Legend -->
   <div class="legend">
-    <div class="legend-title">Status Legend</div>
+    <div class="legend-title">Network Status</div>
     <div class="legend-item"><div class="legend-dot active"></div><span>Active Locations</span></div>
     <div class="legend-item"><div class="legend-dot planned"></div><span>Planned Locations</span></div>
+    <div class="legend-item"><div class="legend-line"></div><span>Network Connections</span></div>
   </div>
-
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <!-- Controls Info -->
+  <div class="controls-info">
+    <div style="margin-bottom: 8px; font-weight: 600; color: #ffffff;">Controls:</div>
+    <div>• Drag to rotate</div>
+    <div>• Scroll to zoom</div>
+    <div>• Auto-rotation enabled</div>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script>
-    const map = L.map('map', {
-      zoomControl: false,
-      preferCanvas: true
-    }).setView([20, 0], 2);
+    // Import required Three.js components
+    const { WebGLRenderer, Scene, PerspectiveCamera, AmbientLight, DirectionalLight, Color, Fog, PointLight } = THREE;
+    // FastAsFuck Network locations
+    const networkLocations = [
+      { city: "Mumbai", country: "India", lat: 19.0815772, lng: 72.8866275, status: "planned", size: 1.2 },
+      { city: "Dallas", country: "USA", lat: 32.7762719, lng: -96.7968559, status: "active", size: 1.5 },
+      { city: "Los Angeles", country: "USA", lat: 34.0536909, lng: -118.242766, status: "active", size: 1.5 },
+      { city: "Amsterdam", country: "Netherlands", lat: 52.3676, lng: 4.9041, status: "active", size: 1.4 },
+      { city: "Seoul", country: "South Korea", lat: 37.5666791, lng: 126.9782914, status: "active", size: 1.4 }
+    ];
+    
+    // Network connections between ALL locations (including planned)
+    const networkConnections = [];
+    
+    // Create full mesh network between ALL datacenters
+    // Nur Verbindungen zwischen aktiven Standorten
+for (let i = 0; i < networkLocations.length; i++) {
+  for (let j = i + 1; j < networkLocations.length; j++) {
+    const loc1 = networkLocations[i];
+    const loc2 = networkLocations[j];
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/">OSM</a> | FastAsFuck Network',
-      maxZoom: 18,
-    }).addTo(map);
+    if (loc1.status === 'active' && loc2.status === 'active') {
+      networkConnections.push({
+        startLat: loc1.lat,
+        startLng: loc1.lng,
+        endLat: loc2.lat,
+        endLng: loc2.lng,
+        color: '#00ff88',
+        opacity: 0.6,
+        altitude: 0.3 + Math.random() * 0.2,
+        isActive: true
+      });
+    }
+  }
+}
 
-    const geojsonData = {
-      "type": "FeatureCollection",
-      "features": [
-        {"type":"Feature","properties":{"title":"India\n(planned)","marker-color":"#ffaa00","status":"planned"},"geometry":{"type":"Point","coordinates":[72.8866275,19.0815772]}},
-        {"type":"Feature","properties":{"title":"Dallas\n(Active)","marker-color":"#00ff88","status":"active"},"geometry":{"type":"Point","coordinates":[-96.7968559,32.7762719]}},
-        {"type":"Feature","properties":{"title":"Los Angeles\n(Active)","marker-color":"#00ff88","status":"active"},"geometry":{"type":"Point","coordinates":[-118.242766,34.0536909]}},
-        {"type":"Feature","properties":{"title":"Netherlands\n(Active)","marker-color":"#00ff88","status":"active"},"geometry":{"type":"Point","coordinates":[6.0600452,50.8939883]}},
-        {"type":"Feature","properties":{"title":"South Korea\n(Active)","marker-color":"#00ff88","status":"active"},"geometry":{"type":"Point","coordinates":[126.9782914,37.5666791]}}
-      ]
-    };
+    
+    var renderer, camera, scene, controls, globe;
+    let mouseX = 0;
+    let mouseY = 0;
+    let windowHalfX = window.innerWidth / 2;
+    let windowHalfY = window.innerHeight / 2;
+    let labelGroup; // Group for labels that rotate with globe
+    
+    init();
+    initGlobe();
+    onWindowResize();
+    animate();
+    
+    // Initialize core ThreeJS elements
+    function init() {
+      // Initialize renderer
+      renderer = new WebGLRenderer({ antialias: true });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setClearColor(0x040d21);
+      document.body.appendChild(renderer.domElement);
+      // Initialize scene, light
+      scene = new Scene();
+      scene.add(new AmbientLight(0xbbbbbb, 0.4));
+      scene.background = new Color(0x040d21);
+      // Initialize camera
+      camera = new PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.set(0, 0, 300);
+      // Lighting setup
+      const dLight = new DirectionalLight(0xffffff, 0.8);
+      dLight.position.set(-800, 2000, 400);
+      camera.add(dLight);
+      const dLight1 = new DirectionalLight(0x00ff88, 0.6);
+      dLight1.position.set(-200, 500, 200);
+      camera.add(dLight1);
+      const dLight2 = new PointLight(0x8566cc, 0.5);
+      dLight2.position.set(-200, 500, 200);
+      camera.add(dLight2);
+      scene.add(camera);
+      // Add fog for atmosphere
+      scene.fog = new Fog(0x535ef3, 400, 2000);
+      // Simple mouse controls
+      initControls();
+      window.addEventListener("resize", onWindowResize, false);
+      document.addEventListener("mousemove", onMouseMove);
+    }
+    
+    function initControls() {
+      let isDragging = false;
+      let previousMousePosition = { x: 0, y: 0 };
+      document.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        previousMousePosition.x = e.clientX;
+        previousMousePosition.y = e.clientY;
+      });
+      document.addEventListener('mousemove', (e) => {
+        if (isDragging && globe) {
+          const deltaMove = {
+            x: e.clientX - previousMousePosition.x,
+            y: e.clientY - previousMousePosition.y
+          };
+          globe.rotation.y += deltaMove.x * 0.005;
+          globe.rotation.x += deltaMove.y * 0.005;
+          previousMousePosition.x = e.clientX;
+          previousMousePosition.y = e.clientY;
+        }
+      });
+      document.addEventListener('mouseup', () => {
+        isDragging = false;
+      });
+      // Zoom with wheel
+      document.addEventListener('wheel', (e) => {
+        camera.position.z += e.deltaY * 0.1;
+        camera.position.z = Math.max(150, Math.min(500, camera.position.z));
+      });
+    }
+    
+    // Initialize Globe
+    function initGlobe() {
+      // Create basic globe geometry
+      const globeGeometry = new THREE.SphereGeometry(100, 64, 32);
+      
+      // Load earth texture
+      const textureLoader = new THREE.TextureLoader();
+      const earthTexture = textureLoader.load('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg');
+      
+      const globeMaterial = new THREE.MeshPhongMaterial({
+        map: earthTexture,
+        color: new Color(0x3a228a),
+        emissive: new Color(0x220038),
+        emissiveIntensity: 0.1,
+        shininess: 0.7
+      });
+      globe = new THREE.Mesh(globeGeometry, globeMaterial);
+      scene.add(globe);
+      
+      // Create a group for labels that rotates with the globe
+      labelGroup = new THREE.Group();
+      scene.add(labelGroup);
+      
+      // Add atmosphere glow
+      const atmosphereGeometry = new THREE.SphereGeometry(105, 64, 32);
+      const atmosphereMaterial = new THREE.ShaderMaterial({
+        transparent: true,
+        side: THREE.BackSide,
+        vertexShader: `
+          varying vec3 vNormal;
+          void main() {
+            vNormal = normalize(normalMatrix * normal);
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          varying vec3 vNormal;
+          void main() {
+            float intensity = pow(0.6 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.0);
+            gl_FragColor = vec4(0.3, 0.6, 1.0, 1.0) * intensity;
+          }
+        `
+      });
+      
+      const atmosphere = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
+      scene.add(atmosphere);
+      // Add network locations after a delay
+      setTimeout(() => {
+        addNetworkLocations();
+        addNetworkConnections();
+      }, 1000);
+    }
+    
+    // Convert lat/lng to 3D position
+    function latLngToVector3(lat, lng, radius) {
+      const phi = (90 - lat) * (Math.PI / 180);
+      const theta = (lng + 180) * (Math.PI / 180);
+      
+      const x = -(radius * Math.sin(phi) * Math.cos(theta));
+      const z = (radius * Math.sin(phi) * Math.sin(theta));
+      const y = (radius * Math.cos(phi));
+      
+      return new THREE.Vector3(x, y, z);
+    }
+    
+    function addNetworkLocations() {
+      networkLocations.forEach((location, index) => {
+        const position = latLngToVector3(location.lat, location.lng, 102);
+        
+        // Create location marker
+        const markerGeometry = new THREE.SphereGeometry(2 * location.size, 16, 16);
+        const markerMaterial = new THREE.MeshBasicMaterial({
+          color: location.status === 'active' ? 0x00ff88 : 0xffaa00,
+          transparent: true,
+          opacity: 0.9
+        });
+        
+        const marker = new THREE.Mesh(markerGeometry, markerMaterial);
+        marker.position.copy(position);
+        globe.add(marker);
+        
+        // Create glow effect
+        const glowGeometry = new THREE.SphereGeometry(3 * location.size, 16, 16);
+        const glowMaterial = new THREE.MeshBasicMaterial({
+          color: location.status === 'active' ? 0x00ff88 : 0xffaa00,
+          transparent: true,
+          opacity: 0.3
+        });
+        
+        const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+        glow.position.copy(position);
+        globe.add(glow);
+        
+        // Add pulsing animation for active locations
+        if (location.status === 'active') {
+          marker.userData = { 
+            type: 'activeMarker', 
+            pulsePhase: Math.random() * Math.PI * 2,
+            originalScale: marker.scale.x 
+          };
+          glow.userData = { 
+            type: 'activeGlow', 
+            pulsePhase: Math.random() * Math.PI * 2,
+            originalOpacity: glow.material.opacity 
+          };
+        }
+        
+        // Add text label - positioned above the marker
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+        
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 20px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(location.city, 128, 25);
+        ctx.font = '14px Inter, sans-serif';
+        ctx.fillStyle = location.status === 'active' ? '#00ff88' : '#ffaa00';
+        ctx.fillText(location.status.toUpperCase(), 128, 45);
+        
+        const labelTexture = new THREE.CanvasTexture(canvas);
+        const labelMaterial = new THREE.SpriteMaterial({ 
+          map: labelTexture,
+          transparent: true,
+          opacity: 0.9
+        });
+        
+        const label = new THREE.Sprite(labelMaterial);
+        
+        // Position label above the marker
+        const labelPosition = position.clone();
+        labelPosition.normalize().multiplyScalar(110); // Higher radius for labels
+        label.position.copy(labelPosition);
+        label.scale.set(20, 5, 1);
+        
+        // Store data for animation and sync with globe rotation
+        label.userData = {
+          type: 'locationLabel',
+          location: location,
+          basePosition: labelPosition.clone(),
+          pulsePhase: Math.random() * Math.PI * 2,
+          markerPosition: position
+        };
+        
+        labelGroup.add(label);
+      });
+    }
+    
+    function addNetworkConnections() {
+  networkConnections.forEach(connection => {
+    const startPos = latLngToVector3(connection.startLat, connection.startLng, 100);
+    const endPos = latLngToVector3(connection.endLat, connection.endLng, 100);
 
-    const geoLayer = L.geoJSON(geojsonData, {
-      pointToLayer: (feature, latlng) => {
-        const color = feature.properties["marker-color"] || "#ff0000";
-        const divIcon = L.divIcon({className:"", html:`<div class="custom-marker ${feature.properties.status}" style="background:${color};"></div>`, iconSize:[20,20], iconAnchor:[10,10]});
-        const marker = L.marker(latlng, {icon: divIcon});
-        const [location, statusText] = feature.properties.title.split('\n');
-        marker.bindPopup(`<div class="popup-title">${location}</div><div class="popup-status">${statusText}</div>`, {closeButton:false, offset:[0,-10]});
-        marker.on('mouseover', () => marker.openPopup());
-        return marker;
+    // Berechne den Mittelpunkt direkt zwischen Start und Ende
+    const midPoint = new THREE.Vector3().addVectors(startPos, endPos).multiplyScalar(0.4);
+
+    // Füge Höhe hinzu: leicht über die Kugel hinaus
+    midPoint.normalize().multiplyScalar(100 + connection.altitude * 100);
+
+    const curve = new THREE.QuadraticBezierCurve3(startPos, midPoint, endPos);
+    const points = curve.getPoints(330);
+
+    const arcGeometry = new THREE.BufferGeometry().setFromPoints(points);
+    const arcMaterial = new THREE.LineBasicMaterial({ 
+      color: connection.color,
+      transparent: true,
+      opacity: connection.opacity,
+      linewidth: 2
+    });
+
+    const arc = new THREE.Line(arcGeometry, arcMaterial);
+    globe.add(arc);
+
+    // Partikel für aktive Verbindungen
+    if (connection.isActive) {
+      const particleCount = 3;
+      for (let i = 0; i < particleCount; i++) {
+        const particleGeometry = new THREE.SphereGeometry(0.5, 8, 8);
+        const particleMaterial = new THREE.MeshBasicMaterial({ 
+          color: 0x00ff88,
+          transparent: true,
+          opacity: 0.8
+        });
+
+        const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+        particle.userData = {
+          type: 'networkParticle',
+          curve: curve,
+          progress: i / particleCount,
+          speed: 0.005 + Math.random() * 0.005
+        };
+
+        globe.add(particle);
       }
-    }).addTo(map);
+    }
+  });
+}
 
-    map.fitBounds(geoLayer.getBounds(), {padding:[50,50]});
+    
+    function onMouseMove(event) {
+      mouseX = event.clientX - windowHalfX;
+      mouseY = event.clientY - windowHalfY;
+    }
+    
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      windowHalfX = window.innerWidth / 2;
+      windowHalfY = window.innerHeight / 2;
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+    
+    function animate() {
+      requestAnimationFrame(animate);
+      
+      // Auto rotation
+      if (globe) {
+        globe.rotation.y += 0.002;
+        // Sync label group rotation with globe
+        labelGroup.rotation.y = globe.rotation.y;
+        labelGroup.rotation.x = globe.rotation.x;
+      }
+      
+      // Animate pulsing markers and particles
+      const time = Date.now() * 0.001;
+      
+      globe.children.forEach(child => {
+        if (child.userData.type === 'activeMarker') {
+          const pulse = Math.sin(time * 2 + child.userData.pulsePhase) * 0.5 + 0.5;
+          child.scale.setScalar(child.userData.originalScale * (1 + pulse * 0.3));
+        }
+        
+        if (child.userData.type === 'activeGlow') {
+          const pulse = Math.sin(time * 2 + child.userData.pulsePhase) * 0.5 + 0.5;
+          child.material.opacity = child.userData.originalOpacity * (0.3 + pulse * 0.7);
+        }
+        
+        if (child.userData.type === 'networkParticle') {
+          child.userData.progress += child.userData.speed;
+          if (child.userData.progress > 1) child.userData.progress = 0;
+          
+          const point = child.userData.curve.getPoint(child.userData.progress);
+          child.position.copy(point);
+          
+          // Fade in/out at ends
+          const fadeDistance = 0.1;
+          let opacity = 1;
+          if (child.userData.progress < fadeDistance) {
+            opacity = child.userData.progress / fadeDistance;
+          } else if (child.userData.progress > 1 - fadeDistance) {
+            opacity = (1 - child.userData.progress) / fadeDistance;
+          }
+          child.material.opacity = opacity * 0.8;
+        }
+      });
+      
+      // Animate labels
+      labelGroup.children.forEach(label => {
+        if (label.userData && label.userData.type === 'locationLabel') {
+          // Small floating animation
+          const float = Math.sin(time + label.userData.pulsePhase) * 0.5;
+          label.position.copy(label.userData.basePosition);
+          const floatOffset = label.userData.basePosition.clone().normalize().multiplyScalar(float);
+          label.position.add(floatOffset);
+          
+          // Pulse active location labels
+          if (label.userData.location.status === 'active') {
+            const pulse = Math.sin(time * 1.5 + label.userData.pulsePhase) * 0.2 + 0.8;
+            label.material.opacity = pulse;
+          } else {
+            label.material.opacity = 0.7;
+          }
+        }
+      });
+      
+      // Subtle camera movement
+      camera.position.x += (mouseX * 0.1 - camera.position.x) * 0.002;
+      camera.position.y += (-mouseY * 0.1 - camera.position.y) * 0.002;
+      camera.lookAt(scene.position);
+      
+      renderer.render(scene, camera);
+    }
   </script>
 </body>
 </html>
