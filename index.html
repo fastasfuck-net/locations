@@ -63,15 +63,17 @@
     <div class="legend-item"><div class="legend-dot planned"></div><span>Planned Locations</span></div>
     <div class="legend-item"><div class="legend-line"></div><span>Network Connections</span></div>
   </div>
-  <!-- Controls Info -->
+  
+<!-- Auto-rotation Toggle -->
   <div class="controls-info">
     <div style="margin-bottom: 8px; font-weight: 600; color: #ffffff;">Controls:</div>
     <div>• Drag to rotate</div>
     <div>• Scroll to zoom</div>
     <div>• Auto-rotation enabled</div>
+    <button id="toggleRotation" style="margin-top:8px; padding:5px 10px; border:none; border-radius:6px; background:#00ff88; color:#000; cursor:pointer;">
+      Toggle Auto-Rotation
+    </button>
   </div>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script>
     // Import required Three.js components
     const { WebGLRenderer, Scene, PerspectiveCamera, AmbientLight, DirectionalLight, Color, Fog, PointLight } = THREE;
     // FastAsFuck Network locations
@@ -111,6 +113,7 @@ for (let i = 0; i < networkLocations.length; i++) {
     
     var renderer, camera, scene, controls, globe;
     let mouseX = 0;
+    let autoRotate = true;
     let mouseY = 0;
     let windowHalfX = window.innerWidth / 2;
     let windowHalfY = window.innerHeight / 2;
@@ -402,12 +405,13 @@ for (let i = 0; i < networkLocations.length; i++) {
       requestAnimationFrame(animate);
       
       // Auto rotation
-      if (globe) {
+      if (globe && autoRotate) {
         globe.rotation.y += 0.002;
         // Sync label group rotation with globe
         labelGroup.rotation.y = globe.rotation.y;
         labelGroup.rotation.x = globe.rotation.x;
       }
+
       
       // Animate pulsing markers and particles
       const time = Date.now() * 0.001;
@@ -468,7 +472,13 @@ for (let i = 0; i < networkLocations.length; i++) {
       
       renderer.render(scene, camera);
     }
+
+    document.getElementById('toggleRotation').addEventListener('click', () => {
+      autoRotate = !autoRotate;
+    });
+
   </script>
 </body>
 
 </html>
+
